@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -123,6 +125,34 @@ func apiPost(path string, payload interface{}, into interface{}) error {
 		}
 	}
 	return nil
+}
+
+func cancelPow() {
+	req, err := http.NewRequest("POST", *baseURL+"/cancel_pow", nil)
+	if err != nil {
+		fmt.Println("[!] cancel_pow: build request:", err)
+		return
+	}
+	if *privateKey != "" {
+		req.Header.Set("Authorization", "Bearer "+*privateKey)
+	}
+
+	// Use a short timeout for best-effort cleanup
+	c := &http.Client{Timeout: 5 * time.Second}
+	resp, err := c.Do(req)
+	if err != nil {
+		fmt.Println("[!] cancel_pow:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Println("[!] cancel_pow failed:", resp.Status, "-", string(body))
+		return
+	}
+
+	fmt.Println("[*] cancel_pow: ok (best-effort)")
 }
 
 // =====================
@@ -276,6 +306,15 @@ func main() {
 	fmt.Println("Workers:", *workers)
 	fmt.Println("Stop at daily cap:", *stopAtCap)
 	fmt.Println("Press Ctrl+C to stop.\n")
+	// Best-effort cleanup on Ctrl+C / SIGTERM: release the IP mining lock
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		fmt.Println("\n[!] Caught Ctrl+C / SIGTERM -> releasing IP lock...")
+		cancelPow()
+		os.Exit(0)
+	}()
 
 	for {
 		me, err := getAccountInfo()
