@@ -63,9 +63,7 @@ go build
 Basic usage (public demo backend):
 
 ```bash
-./faucet_miner \
-  -url https://hashcash-pow-faucet.dynv6.net/api \
-  -key "YOUR_PRIVATE_KEY"
+./faucet_miner -url https://hashcash-pow-faucet.dynv6.net/api -key "YOUR_PRIVATE_KEY"
 ```
 
 Common flags:
@@ -100,10 +98,7 @@ Example (local backend):
 Example (public demo backend):
 
 ```bash
-./faucet_miner \
-  -url https://hashcash-pow-faucet.dynv6.net/api \
-  -key "YOUR_PRIVATE_KEY" \
-  -workers 6
+./faucet_miner -url https://hashcash-pow-faucet.dynv6.net/api -key "YOUR_PRIVATE_KEY" -workers 6
 ```
 
 ---
