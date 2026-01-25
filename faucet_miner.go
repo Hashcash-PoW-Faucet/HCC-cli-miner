@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -297,12 +298,12 @@ func fmtMMSS(d time.Duration) string {
 }
 
 func expectedTries(bits int) float64 {
-	// Expected number of trials for a random oracle is ~2^bits
+	// Expected number of trials for a random oracle is ~2^bits.
+	// Use Ldexp to avoid invalid float shifts and to handle larger bit values safely.
 	if bits <= 0 {
 		return 1
 	}
-	// Use float math; for typical faucet bits this is safe.
-	return float64(uint64(1)) << uint(bits)
+	return math.Ldexp(1.0, bits) // 1.0 * 2^bits
 }
 
 func sleepWithCountdown(totalSeconds int64) {
