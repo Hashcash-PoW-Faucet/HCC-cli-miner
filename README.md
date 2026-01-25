@@ -1,7 +1,7 @@
 # Hashcash PoW Faucet CLI Miner
 
-This is a simple command‑line miner for the **Hashcash PoW Faucet** demo.  
-It talks to the public HTTP API (`/me`, `/challenge`, `/submit_pow`) and solves
+This is a simple command‑line miner for the experimental **Hashcash PoW Faucet**.  
+It talks to the public HTTP API (`/me`, `/challenge`, `/submit_pow`, `/cancel_pow`) and solves
 Proof‑of‑Work challenges to claim credit points for a given faucet **private key**.
 
 The miner is written in Go, uses only the standard library and supports
@@ -10,11 +10,15 @@ multiple worker threads.
 
 ## Features
 
-- Connects to the faucet HTTP API (`/me`, `/challenge`, `/submit_pow`).
+- Connects to the faucet HTTP API (`/me`, `/challenge`, `/submit_pow`, `/cancel_pow`).
 - Uses your faucet *private key* (the random token from the web UI) as bearer token.
 - Multi‑threaded PoW (configurable number of workers).
+- **Live PoW progress** (tries, hashrate, rough ETA) while searching (optional).
+- **Live cooldown countdown** (second‑by‑second) instead of a silent sleep.
+- **Session statistics** (credits earned, runtime, credits/hour, average PoW rate, solves).
 - Respects cooldown and daily earn cap exposed by the server.
 - Can optionally stop automatically when the daily cap is reached.
+- **Graceful shutdown (Ctrl+C / SIGTERM):** best‑effort call to `POST /cancel_pow` to release the current IP mining lock.
 
 ---
 
@@ -81,6 +85,12 @@ Common flags:
   Set to `false` if you want the miner to keep running even after a failed claim, but
   note that the backend will not award more credits beyond the cap.
 
+- `-progress`
+  Show a live PoW progress line (tries, hashrate, ETA) while searching (default: `true`).
+
+- `-progress-interval`
+  Progress update interval in seconds (default: `2`).
+
 Example (local backend):
 
 ```bash
@@ -137,6 +147,9 @@ Example (public demo backend):
    - you stop the miner manually (Ctrl+C), or
    - a persistent error occurs.
 
+7. **Ctrl+C cleanup – `/cancel_pow` (best‑effort)**  
+   If you stop the miner (Ctrl+C / SIGTERM), it will call `/cancel_pow` to release the current in‑memory IP mining lock immediately, instead of waiting for the stamp TTL to expire.
+
 ---
 
 ## Example output
@@ -148,6 +161,7 @@ A typical run might look like this:
 Base URL: https://hashcash-pow-faucet.dynv6.net/api
 Workers: 6
 Stop at daily cap: true
+Live progress: true (interval: 2 s)
 Press Ctrl+C to stop.
 
 Account: QmExampleAddress
@@ -155,8 +169,10 @@ Account: QmExampleAddress
   Earned today: 5 / 50
 [*] Mining one credit...
 [+] Challenge: bits=24, stamp=earn|ts=...
+[*] PoW searching... tries=812345  rate=540.2 kH/s  ETA≈0m 12s
 [+] PoW solved: nonce=1234567, time=18.42s, rate≈550.1 kH/s (6 workers)
 [+] Submit ok: credits=4, next_seq=6
+    Session: +1 credits in 0m 25s (144.00 credits/hour), avg PoW rate≈548.7 kH/s, solves=1
 ```
 
 ---
@@ -167,6 +183,7 @@ Account: QmExampleAddress
 - Cooldown and caps are enforced on the server; the miner simply follows them.
 - Running multiple miners with the same private key is technically possible but not recommended,
   as they will compete for the same account and may hit more cooldown / rate limits.
+- On shutdown (Ctrl+C / SIGTERM), the miner performs a best‑effort cleanup call (`/cancel_pow`) to release the server‑side IP lock.
 
 Keep in mind that this is an experimental faucet demo, not a production‑grade system.
 
