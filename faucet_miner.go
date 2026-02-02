@@ -460,7 +460,11 @@ func main() {
 
 		fmt.Printf("Account: %s\n", me.AccountID)
 		fmt.Printf("  Credits: %d\n", me.Credits)
-		fmt.Printf("  Earned today: %d / %d\n", me.EarnedToday, me.DailyEarnCap)
+		if *extremeMode {
+			fmt.Printf("  Earned EXTREME today: %d\n", me.EarnedToday)
+		} else {
+			fmt.Printf("  Earned today: %d / %d\n", me.EarnedToday, me.DailyEarnCap)
+		}
 
 		if lastKnownCredits < 0 {
 			lastKnownCredits = me.Credits
