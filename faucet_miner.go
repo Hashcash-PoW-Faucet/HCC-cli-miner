@@ -29,7 +29,7 @@ import (
 var (
 	baseURL           = flag.String("url", "https://hashcash-pow-faucet.dynv6.net/api", "Base URL of the faucet API")
 	privateKey        = flag.String("key", "", "Private key (from the web faucet)")
-	workers           = flag.Int("workers", 4, "Number of PoW worker goroutines (0 = auto-detect CPU cores)")
+	workers           = flag.Int("workers", 0, "Number of PoW worker goroutines (0 = auto-detect CPU cores)")
 	stopAtCap         = flag.Bool("stop-at-cap", true, "Stop when daily earn cap is reached")
 	extremeMode       = flag.Bool("extreme", false, "Enable HashCash Extreme mode (no cooldown, higher difficulty, separate daily cap)")
 	showProgress      = flag.Bool("progress", true, "Show live PoW progress (hashrate/ETA) while searching")
@@ -178,10 +178,12 @@ func getNonceOffset() uint64 {
 	// Random default: avoid multiple instances searching the exact same nonces.
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err == nil {
-		return binary.LittleEndian.Uint64(b[:])
+		r := binary.LittleEndian.Uint64(b[:])
+		// Clamp to keep decimal nonce length reasonable (performance) while still randomizing starts.
+		return r % 1000000000000 // 1e12
 	}
 	// Fallback if crypto/rand fails (should be rare)
-	return uint64(time.Now().UnixNano())
+	return uint64(time.Now().UnixNano()) % 1000000000000
 }
 
 func leadingZeroBits(b []byte) int {
@@ -217,23 +219,6 @@ func solvePow(stamp string, bits int, numWorkers int, showProg bool, progInterva
 	start := time.Now()
 
 	var totalTries uint64
-
-	// If canceled (e.g., another miner advanced seq), return early with Canceled=true.
-	go func() {
-		<-cancel
-		elapsed := time.Since(start)
-		triesGlobal := atomic.LoadUint64(&totalTries)
-		rate := 0.0
-		if elapsed.Seconds() > 0 {
-			rate = float64(triesGlobal) / elapsed.Seconds() / 1000.0
-		}
-		res := powResult{Nonce: 0, Tries: triesGlobal, Elapsed: elapsed, RateKHS: rate, Canceled: true}
-		select {
-		case resultCh <- res:
-			close(done)
-		default:
-		}
-	}()
 
 	// Optional progress ticker
 	if showProg {
@@ -281,12 +266,15 @@ func solvePow(stamp string, bits int, numWorkers int, showProg bool, progInterva
 			step := uint64(numWorkers)
 
 			for {
-				select {
-				case <-done:
-					return
-				case <-cancel:
-					return
-				default:
+				// Check for stop signals only occasionally to keep the hot loop fast.
+				if (tries & 0xFFF) == 0 {
+					select {
+					case <-done:
+						return
+					case <-cancel:
+						return
+					default:
+					}
 				}
 
 				// Rebuild buffer: prefix + decimal nonce
@@ -327,11 +315,18 @@ func solvePow(stamp string, bits int, numWorkers int, showProg bool, progInterva
 		}(nonceOffset + uint64(w))
 	}
 
-	// Take first result
-	res := <-resultCh
-	if showProg {
-		// Clear the progress line
-		fmt.Printf("\r")
+	var res powResult
+	select {
+	case res = <-resultCh:
+		// solved
+	case <-cancel:
+		elapsed := time.Since(start)
+		triesGlobal := atomic.LoadUint64(&totalTries)
+		rate := 0.0
+		if elapsed.Seconds() > 0 {
+			rate = float64(triesGlobal) / elapsed.Seconds() / 1000.0
+		}
+		res = powResult{Nonce: 0, Tries: triesGlobal, Elapsed: elapsed, RateKHS: rate, Canceled: true}
 	}
 	return res
 }
@@ -514,6 +509,13 @@ func main() {
 		*workers = runtime.NumCPU()
 	}
 
+	// Ensure Go uses enough OS threads to actually run the worker goroutines in parallel.
+	// (If GOMAXPROCS is low due to env/config, performance can drop dramatically.)
+	curProcs := runtime.GOMAXPROCS(0)
+	if curProcs < *workers {
+		runtime.GOMAXPROCS(*workers)
+	}
+
 	if *privateKey == "" {
 		fmt.Println("ERROR: please provide -key with your private faucet key.")
 		flag.Usage()
@@ -523,6 +525,8 @@ func main() {
 	fmt.Println("=== Hashcash PoW Faucet CLI Miner ===")
 	fmt.Println("Base URL:", *baseURL)
 	fmt.Println("Workers:", *workers)
+	fmt.Println("NumCPU:", runtime.NumCPU())
+	fmt.Println("GOMAXPROCS:", runtime.GOMAXPROCS(0))
 	fmt.Println("Stop at daily cap:", *stopAtCap)
 	fmt.Println("Live progress:", *showProgress, "(interval:", *progressIntervalS, "s)")
 	if *extremeMode {
