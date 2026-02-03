@@ -1,4 +1,4 @@
-# Hashcash CLI Miner
+# Hashcash Credits (HCC) CLI Miner
 
 This is a simple command‑line miner for the experimental **Hashcash PoW Faucet**.  
 It talks to the public HTTP API (`/me`, `/challenge`, `/challenge_extreme`, `/submit_pow`, `/cancel_pow`) and solves
@@ -11,7 +11,7 @@ multi‑core CPUs via worker goroutines.
 
 ## Features
 
-- Connects to the faucet HTTP API:
+- Connects to the Hashcash Faucet HTTP API:
   - `/me` – account info
   - `/challenge` – normal mining challenge
   - `/challenge_extreme` – **Extreme Mode** challenge
@@ -41,7 +41,7 @@ multi‑core CPUs via worker goroutines.
 
 You can find your private key in the web UI:
 
-1. Open the faucet in your browser.
+1. Open the Hashcash PoW Faucet in your browser.
 2. Either create a new account (signup PoW) or import an existing key.
 3. Use **“Export private key”** to copy it from the input box.
 
@@ -49,16 +49,16 @@ You can find your private key in the web UI:
 
 ## Building
 
-Save the miner source as `faucet_miner.go`  
+Save the miner source as `HCC-cli-miner.go`  
 (or name it `main.go` inside its own folder).
 
 Then run:
 
 ```bash
-go build -o faucet_miner faucet_miner.go
+go build -o HCC-cli-miner HCC-cli-miner.go
 ```
 
-This produces a binary called `faucet_miner` (or `faucet_miner.exe` on Windows).
+This produces a binary called `HCC-cli-miner` (or `HCC-cli-miner.exe` on Windows).
 
 Alternatively, if the file is named `main.go`:
 
@@ -71,11 +71,11 @@ For cross‑compilation (examples):
 ```bash
 # Linux amd64 from Linux
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
-  go build -o faucet_miner_linux_amd64 faucet_miner.go
+  go build -o HCC-cli-miner_linux_amd64 HCC-cli-miner.go
 
 # Windows amd64 from Linux
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-  go build -o faucet_miner_win_amd64.exe faucet_miner.go
+  go build -o HCC-cli-miner_win_amd64.exe HCC-cli-miner.go
 ```
 
 ---
@@ -85,7 +85,7 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
 Basic usage (public demo backend):
 
 ```bash
-./faucet_miner -url https://hashcash-pow-faucet.dynv6.net/api -key "YOUR_PRIVATE_KEY"
+./HCC-cli-miner -url https://hashcash-pow-faucet.dynv6.net/api -key "YOUR_PRIVATE_KEY"
 ```
 
 ### Common flags
@@ -124,7 +124,7 @@ Basic usage (public demo backend):
 Normal mode, public backend, auto workers:
 
 ```bash
-./faucet_miner \
+./HCC-cli-miner \
   -url https://hashcash-pow-faucet.dynv6.net/api \
   -key "YOUR_PRIVATE_KEY"
 ```
@@ -132,7 +132,7 @@ Normal mode, public backend, auto workers:
 Normal mode, local backend, explicit workers:
 
 ```bash
-./faucet_miner \
+./HCC-cli-miner \
   -url http://127.0.0.1:8000 \
   -key "YOUR_PRIVATE_KEY" \
   -workers 8
@@ -141,7 +141,7 @@ Normal mode, local backend, explicit workers:
 Extreme Mode, public backend, auto workers:
 
 ```bash
-./faucet_miner \
+./HCC-cli-miner \
   -url https://hashcash-pow-faucet.dynv6.net/api \
   -key "YOUR_PRIVATE_KEY" \
   -extreme
