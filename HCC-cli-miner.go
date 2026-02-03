@@ -27,11 +27,11 @@ import (
 // =====================
 
 var (
-	baseURL           = flag.String("url", "https://hashcash-pow-faucet.dynv6.net/api", "Base URL of the faucet API")
-	privateKey        = flag.String("key", "", "Private key (from the web faucet)")
+	baseURL           = flag.String("url", "https://hashcash-pow-faucet.dynv6.net/api", "Base URL of the Hashcash PoW faucet API")
+	privateKey        = flag.String("key", "", "Private key (from the web Hashcash PoW faucet)")
 	workers           = flag.Int("workers", 0, "Number of PoW worker goroutines (0 = auto-detect CPU cores)")
 	stopAtCap         = flag.Bool("stop-at-cap", true, "Stop when daily earn cap is reached")
-	extremeMode       = flag.Bool("extreme", false, "Enable HashCash Extreme mode (no cooldown, higher difficulty, separate daily cap)")
+	extremeMode       = flag.Bool("extreme", false, "Enable Extreme Mining mode (no cooldown, higher difficulty, separate daily cap)")
 	showProgress      = flag.Bool("progress", true, "Show live PoW progress (hashrate/ETA) while searching")
 	progressIntervalS = flag.Int("progress-interval", 2, "Progress update interval in seconds")
 	nonceOffsetFlag   = flag.Int64("nonce-offset", -1, "Nonce start offset for this process (-1 = random). Use different values to avoid duplicate work across multiple miners.")
@@ -517,12 +517,12 @@ func main() {
 	}
 
 	if *privateKey == "" {
-		fmt.Println("ERROR: please provide -key with your private faucet key.")
+		fmt.Println("ERROR: please provide -key with your private HCC key.")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	fmt.Println("=== Hashcash PoW Faucet CLI Miner ===")
+	fmt.Println("=== HCC CLI Miner ===")
 	fmt.Println("Base URL:", *baseURL)
 	fmt.Println("Workers:", *workers)
 	fmt.Println("NumCPU:", runtime.NumCPU())
