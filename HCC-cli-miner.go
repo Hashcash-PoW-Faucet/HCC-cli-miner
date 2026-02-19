@@ -35,7 +35,7 @@ var (
 	potatoMode        = flag.Bool("potato", false, "Enable HashCash POTATO mode (lower difficulty, counts toward normal cap, longer cooldown)")
 	benchMode         = flag.Bool("bench", false, "Run local benchmark only (no API calls). Benchmarks the real mining loop for a given difficulty (default: bits=28).")
 	benchBits         = flag.Int("bench-bits", 28, "Benchmark difficulty in leading zero bits (normal mode default: 28)")
-	benchRounds       = flag.Int("bench-rounds", 5, "Number of benchmark rounds (each round mines one solution)")
+	benchRounds       = flag.Int("bench-rounds", 10, "Number of benchmark rounds (each round mines one solution)")
 	showProgress      = flag.Bool("progress", true, "Show live PoW progress (hashrate/ETA) while searching")
 	progressIntervalS = flag.Int("progress-interval", 2, "Progress update interval in seconds")
 	nonceOffsetFlag   = flag.Int64("nonce-offset", -1, "Nonce start offset for this process (-1 = random). Use different values to avoid duplicate work across multiple miners.")
