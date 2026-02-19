@@ -33,9 +33,12 @@ var (
 	stopAtCap         = flag.Bool("stop-at-cap", true, "Stop when daily earn cap is reached")
 	extremeMode       = flag.Bool("extreme", false, "Enable HashCash Extreme mode (no cooldown, higher difficulty, separate daily cap)")
 	potatoMode        = flag.Bool("potato", false, "Enable HashCash POTATO mode (lower difficulty, counts toward normal cap, longer cooldown)")
-	benchMode         = flag.Bool("bench", false, "Run local benchmark only (no API calls). Measures raw SHA256 throughput.")
-	benchSeconds      = flag.Int("bench-seconds", 10, "Benchmark duration in seconds")
-	benchInputBytes   = flag.Int("bench-bytes", 64, "Benchmark input size in bytes (prefix + nonce).")
+	benchMode         = flag.Bool("bench", false, "Run local benchmark only (no API calls). Simulates mining for a given difficulty (default: bits=28).")
+	benchBits         = flag.Int("bench-bits", 28, "Benchmark difficulty in leading zero bits (normal mode default: 28)")
+	benchRounds       = flag.Int("bench-rounds", 3, "Number of benchmark rounds (each round mines one solution)")
+	benchRaw          = flag.Bool("bench-raw", false, "Also run raw SHA256 throughput benchmark (upper bound)")
+	benchSeconds      = flag.Int("bench-seconds", 10, "Raw benchmark duration in seconds")
+	benchInputBytes   = flag.Int("bench-bytes", 64, "Raw benchmark input size in bytes (prefix + nonce)")
 	showProgress      = flag.Bool("progress", true, "Show live PoW progress (hashrate/ETA) while searching")
 	progressIntervalS = flag.Int("progress-interval", 2, "Progress update interval in seconds")
 	nonceOffsetFlag   = flag.Int64("nonce-offset", -1, "Nonce start offset for this process (-1 = random). Use different values to avoid duplicate work across multiple miners.")
@@ -358,7 +361,7 @@ func expectedTries(bits int) float64 {
 	return math.Ldexp(1.0, bits) // 1.0 * 2^bits
 }
 
-func runBenchmark(workers int, seconds int, inputBytes int) {
+func runBenchmarkRaw(workers int, seconds int, inputBytes int) {
 	if workers <= 0 {
 		workers = runtime.NumCPU()
 	}
@@ -374,7 +377,7 @@ func runBenchmark(workers int, seconds int, inputBytes int) {
 		runtime.GOMAXPROCS(workers)
 	}
 
-	fmt.Println("=== Hashcash CLI Miner Benchmark ===")
+	fmt.Println("=== Hashcash CLI Miner Raw SHA256 Benchmark ===")
 	fmt.Println("Workers:", workers)
 	fmt.Println("NumCPU:", runtime.NumCPU())
 	fmt.Println("GOMAXPROCS:", runtime.GOMAXPROCS(0))
@@ -438,6 +441,82 @@ func runBenchmark(workers int, seconds int, inputBytes int) {
 			}
 			fmt.Printf("\r[*] running... hashes=%d  elapsed=%.1fs  rate=%.2f MH/s", count, elapsed.Seconds(), mh)
 		}
+	}
+}
+
+func runBenchmarkMining(workers int, bits int, rounds int) {
+	if workers <= 0 {
+		workers = runtime.NumCPU()
+	}
+	if bits <= 0 {
+		bits = 28
+	}
+	if rounds <= 0 {
+		rounds = 3
+	}
+	// Ensure Go uses enough OS threads to run the workers.
+	cur := runtime.GOMAXPROCS(0)
+	if cur < workers {
+		runtime.GOMAXPROCS(workers)
+	}
+
+	fmt.Println("=== Hashcash CLI Miner Mining Benchmark ===")
+	fmt.Println("Workers:", workers)
+	fmt.Println("NumCPU:", runtime.NumCPU())
+	fmt.Println("GOMAXPROCS:", runtime.GOMAXPROCS(0))
+	fmt.Println("Difficulty (bits):", bits)
+	fmt.Println("Rounds:", rounds)
+	fmt.Println("(Uses the same inner loop as real mining: SHA256(stamp + '|' + decimal nonce))")
+	fmt.Println()
+
+	// Dummy stamp is fine: PoW success probability depends only on bits.
+	stamp := "bench|act=earn_credit|acct=local|seq=0|bits=" + strconv.Itoa(bits) + "|exp=0"
+
+	var totalTries uint64
+	var totalTime time.Duration
+	bestRate := 0.0
+	worstRate := 1e99
+
+	for i := 1; i <= rounds; i++ {
+		nonceOffset := getNonceOffset()
+		cancel := make(chan struct{})
+		start := time.Now()
+		res := solvePow(stamp, bits, workers, false, 0, nonceOffset, cancel)
+		elapsed := time.Since(start)
+		// `solvePow` already returns elapsed, but keep `elapsed` as wall-clock.
+		if res.Elapsed > 0 {
+			elapsed = res.Elapsed
+		}
+		mh := 0.0
+		if elapsed.Seconds() > 0 {
+			mh = float64(res.Tries) / elapsed.Seconds() / 1e6
+		}
+
+		totalTries += res.Tries
+		totalTime += elapsed
+		if mh > bestRate {
+			bestRate = mh
+		}
+		if mh < worstRate {
+			worstRate = mh
+		}
+
+		fmt.Printf("Round %d/%d: tries=%d  time=%.2fs  rate=%.2f MH/s  nonce=%d\n", i, rounds, res.Tries, elapsed.Seconds(), mh, res.Nonce)
+	}
+
+	avgMH := 0.0
+	avgSolve := 0.0
+	if totalTime.Seconds() > 0 {
+		avgMH = float64(totalTries) / totalTime.Seconds() / 1e6
+		avgSolve = totalTime.Seconds() / float64(rounds)
+	}
+	fmt.Println()
+	fmt.Printf("Average: %.2f MH/s (best %.2f, worst %.2f)\n", avgMH, bestRate, worstRate)
+	fmt.Printf("Average solve time: %.2fs at bits=%d\n", avgSolve, bits)
+	fmt.Printf("Theoretical expected tries: ~2^%d = %.0f\n", bits, expectedTries(bits))
+	if avgMH > 0 {
+		expSec := expectedTries(bits) / (avgMH * 1e6)
+		fmt.Printf("Expected time from avg rate: ~%.2fs\n", expSec)
 	}
 }
 
@@ -611,7 +690,11 @@ func main() {
 		if w <= 0 {
 			w = runtime.NumCPU()
 		}
-		runBenchmark(w, *benchSeconds, *benchInputBytes)
+		runBenchmarkMining(w, *benchBits, *benchRounds)
+		if *benchRaw {
+			fmt.Println()
+			runBenchmarkRaw(w, *benchSeconds, *benchInputBytes)
+		}
 		return
 	}
 
