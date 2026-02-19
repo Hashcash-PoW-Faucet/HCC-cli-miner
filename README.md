@@ -119,6 +119,12 @@ Basic usage (public demo backend):
   - The server applies a separate daily cap for extreme mining.  
   - Normal `-stop-at-cap` logic only applies to the normal mode cap; the extreme cap is enforced on the server and the miner stops when that error is detected.
 
+- `-potato`  
+  Enable **Potato Mode** (default: `false`).  
+  - Uses `/challenge_potato` with a lower difficulty and higher cooldown.  
+  - The server applies the normal daily cap for potato mode. Usage of potato mode is discouraged for normal PCs due to the higher cooldown time. 
+
+
 ### Examples
 
 Normal mode, public backend, auto workers:
