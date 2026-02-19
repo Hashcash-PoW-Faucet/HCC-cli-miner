@@ -33,12 +33,9 @@ var (
 	stopAtCap         = flag.Bool("stop-at-cap", true, "Stop when daily earn cap is reached")
 	extremeMode       = flag.Bool("extreme", false, "Enable HashCash Extreme mode (no cooldown, higher difficulty, separate daily cap)")
 	potatoMode        = flag.Bool("potato", false, "Enable HashCash POTATO mode (lower difficulty, counts toward normal cap, longer cooldown)")
-	benchMode         = flag.Bool("bench", false, "Run local benchmark only (no API calls). Simulates mining for a given difficulty (default: bits=28).")
+	benchMode         = flag.Bool("bench", false, "Run local benchmark only (no API calls). Benchmarks the real mining loop for a given difficulty (default: bits=28).")
 	benchBits         = flag.Int("bench-bits", 28, "Benchmark difficulty in leading zero bits (normal mode default: 28)")
-	benchRounds       = flag.Int("bench-rounds", 3, "Number of benchmark rounds (each round mines one solution)")
-	benchRaw          = flag.Bool("bench-raw", false, "Also run raw SHA256 throughput benchmark (upper bound)")
-	benchSeconds      = flag.Int("bench-seconds", 10, "Raw benchmark duration in seconds")
-	benchInputBytes   = flag.Int("bench-bytes", 64, "Raw benchmark input size in bytes (prefix + nonce)")
+	benchRounds       = flag.Int("bench-rounds", 5, "Number of benchmark rounds (each round mines one solution)")
 	showProgress      = flag.Bool("progress", true, "Show live PoW progress (hashrate/ETA) while searching")
 	progressIntervalS = flag.Int("progress-interval", 2, "Progress update interval in seconds")
 	nonceOffsetFlag   = flag.Int64("nonce-offset", -1, "Nonce start offset for this process (-1 = random). Use different values to avoid duplicate work across multiple miners.")
@@ -361,89 +358,6 @@ func expectedTries(bits int) float64 {
 	return math.Ldexp(1.0, bits) // 1.0 * 2^bits
 }
 
-func runBenchmarkRaw(workers int, seconds int, inputBytes int) {
-	if workers <= 0 {
-		workers = runtime.NumCPU()
-	}
-	if seconds <= 0 {
-		seconds = 10
-	}
-	if inputBytes < 16 {
-		inputBytes = 16
-	}
-	// Ensure Go uses enough OS threads to run the workers.
-	cur := runtime.GOMAXPROCS(0)
-	if cur < workers {
-		runtime.GOMAXPROCS(workers)
-	}
-
-	fmt.Println("=== Hashcash CLI Miner Raw SHA256 Benchmark ===")
-	fmt.Println("Workers:", workers)
-	fmt.Println("NumCPU:", runtime.NumCPU())
-	fmt.Println("GOMAXPROCS:", runtime.GOMAXPROCS(0))
-	fmt.Println("Duration:", seconds, "s")
-	fmt.Println("Input bytes:", inputBytes)
-	fmt.Println()
-
-	var total uint64
-	stop := make(chan struct{})
-	start := time.Now()
-	deadline := time.NewTimer(time.Duration(seconds) * time.Second)
-	defer deadline.Stop()
-
-	for w := 0; w < workers; w++ {
-		go func(id int) {
-			// Fixed input buffer; overwrite last 8 bytes with nonce.
-			buf := make([]byte, inputBytes)
-			copy(buf, []byte("bench|"))
-			nonce := uint64(id)
-			local := uint64(0)
-
-			for {
-				// Check stop only occasionally to keep hot loop fast.
-				if (local & 0xFFFF) == 0 {
-					select {
-					case <-stop:
-						atomic.AddUint64(&total, local)
-						return
-					default:
-					}
-				}
-
-				binary.LittleEndian.PutUint64(buf[len(buf)-8:], nonce)
-				_ = sha256.Sum256(buf)
-				local++
-				nonce += uint64(workers)
-			}
-		}(w)
-	}
-
-	// Optional live ticker
-	tick := time.NewTicker(1 * time.Second)
-	defer tick.Stop()
-	for {
-		select {
-		case <-deadline.C:
-			close(stop)
-			// give goroutines a moment to flush
-			time.Sleep(50 * time.Millisecond)
-			elapsed := time.Since(start)
-			count := atomic.LoadUint64(&total)
-			mh := float64(count) / elapsed.Seconds() / 1e6
-			fmt.Printf("\r[*] done: hashes=%d  elapsed=%.2fs  rate=%.2f MH/s\n", count, elapsed.Seconds(), mh)
-			return
-		case <-tick.C:
-			elapsed := time.Since(start)
-			count := atomic.LoadUint64(&total)
-			mh := 0.0
-			if elapsed.Seconds() > 0 {
-				mh = float64(count) / elapsed.Seconds() / 1e6
-			}
-			fmt.Printf("\r[*] running... hashes=%d  elapsed=%.1fs  rate=%.2f MH/s", count, elapsed.Seconds(), mh)
-		}
-	}
-}
-
 func runBenchmarkMining(workers int, bits int, rounds int) {
 	if workers <= 0 {
 		workers = runtime.NumCPU()
@@ -691,10 +605,6 @@ func main() {
 			w = runtime.NumCPU()
 		}
 		runBenchmarkMining(w, *benchBits, *benchRounds)
-		if *benchRaw {
-			fmt.Println()
-			runBenchmarkRaw(w, *benchSeconds, *benchInputBytes)
-		}
 		return
 	}
 
